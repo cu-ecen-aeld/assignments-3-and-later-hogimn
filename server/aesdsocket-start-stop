@@ -1,0 +1,36 @@
+#! /bin/sh
+
+# This is a shell script that starts or stops the aesdsocket daemon.
+
+case "$1" in
+    # If the script is called with the "start" argument, start the daemon.
+    start)
+        # Print a message indicating that the daemon is starting.
+        echo "Starting aesdsocket"
+
+        # Use the start-stop-daemon utility to start the aesdsocket daemon,
+        # with the name "aesdsocket", the executable path /usr/bin/aesdsocket,
+        # and the option -d to run the daemon in the background.
+        start-stop-daemon -S -n aesdsocket -a /usr/bin/aesdsocket -- -d
+        ;;
+
+    # If the script is called with the "stop" argument, stop the daemon.
+    stop)
+        # Print a message indicating that the daemon is stopping.
+        echo "Stopping aesdsocket"
+
+        # Use the start-stop-daemon utility to stop the aesdsocket daemon,
+        # with the name "aesdsocket".
+        start-stop-daemon -K -n aesdsocket
+        ;;
+    # If the script is called with any other argument, print usage information.
+    *)
+        # Print a message explaining the correct usage of the script.
+        echo "Usage:  $0 {start|stop}"
+
+    # Exit the script with an error code of 1 to indicate that it was used incorrectly.
+    exit 1
+esac
+
+# Exit the script with a success code of 0.
+exit 0
