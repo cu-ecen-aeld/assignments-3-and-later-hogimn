@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
+#include <linux/slab.h>
 #include "aesdchar.h"
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
@@ -32,6 +33,9 @@ int aesd_open(struct inode *inode, struct file *filp)
     /**
      * TODO: handle open
      */
+    struct aesd_dev *dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
+    filp->private_data = dev;
+
     return 0;
 }
 
@@ -52,17 +56,93 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     /**
      * TODO: handle read
      */
+    struct aesd_dev *dev = filp->private_data;
+    if (mutex_lock_interruptible(&dev->lock)) {
+        return -ERESTARTSYS;
+    }
+
+    int bytes_remained = count;
+    size_t entry_offset_byte_rtn;
+    // Find the buffer entry for the given offset
+    struct aesd_buffer_entry *entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->buffer, *f_pos, &entry_offset_byte_rtn);
+    if (!entry) {
+        retval = -EFAULT;
+        goto release;
+    }
+
+    // Calculate the number of bytes to read from the current entry
+    int bytes_to_read = entry->size - entry_offset_byte_rtn;
+    if (bytes_to_read > bytes_remained) {
+        // If the remaining bytes to read is less than the bytes available in the entry,
+        // adjust the bytes_to_read
+        bytes_to_read = bytes_remained;
+    }
+
+    // Copy to the userspace buffer
+    if (copy_to_user(buf, entry->buffptr + entry_offset_byte_rtn, bytes_to_read)) {
+        retval = -EFAULT;
+        goto release;
+    }
+
+    *f_pos += bytes_to_read;
+    retval += bytes_to_read;
+
+release:
+    mutex_unlock(&dev->lock);
     return retval;
 }
 
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-    ssize_t retval = -ENOMEM;
+    ssize_t retval = 0;
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
     /**
      * TODO: handle write
      */
+    struct aesd_dev *dev = filp->private_data;
+    if (mutex_lock_interruptible(&dev->lock)) {
+        return -ERESTARTSYS;
+    }
+
+    // Allocate memory for the buffer entry or resize it if already allocated
+    if (dev->entry.buffptr) {
+        dev->entry.buffptr = (char *)krealloc(dev->entry.buffptr, dev->entry.size + count, GFP_KERNEL);
+    } else {
+        dev->entry.buffptr = (char *)kmalloc(sizeof(char) * count, GFP_KERNEL);
+    }
+
+    if (dev->entry.buffptr == NULL) {
+        retval = -ENOMEM;
+        goto release;
+    }
+
+    // Copy data from the userspace buffer
+    if (copy_from_user((void *)dev->entry.buffptr + dev->entry.size, buf, count)) {
+        retval = -EFAULT;
+        goto release;
+    }
+
+    dev->entry.size += count;
+    retval = count;
+
+    // Check if the buffer entry contains a newline character (end of input)
+    if (memchr(dev->entry.buffptr, '\n', dev->entry.size)) {
+        // If the buffer at in_offs index is already allocated, free it
+        if (dev->buffer.entry[dev->buffer.in_offs].buffptr) {
+            kfree(dev->buffer.entry[dev->buffer.in_offs].buffptr);
+            dev->total_bytes -= dev->buffer.entry[dev->buffer.in_offs].size;
+        }
+
+        // Add the current entry to the circular buffer
+        aesd_circular_buffer_add_entry(&dev->buffer, &dev->entry);
+        dev->total_bytes += dev->entry.size;
+        dev->entry.buffptr = NULL;
+        dev->entry.size = 0;
+    }
+
+release:
+    mutex_unlock(&dev->lock);
     return retval;
 }
 struct file_operations aesd_fops = {

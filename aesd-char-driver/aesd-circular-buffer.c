@@ -34,7 +34,8 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     */
     // Determine the total number of bytes written to the buffer
     size_t total_bytes_written = 0;
-    for (int i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++) {
+    int i;
+    for (i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++) {
         total_bytes_written += buffer->entry[i].size;
     }
 
@@ -48,7 +49,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 
     // Iterate through the buffer entries until the corresponding entry for the requested offset is found
     int bytes_searched = 0;
-    for (int i = buffer->out_offs; i != buffer->in_offs || !is_wrapped; i = (i + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) {
+    for (i = buffer->out_offs; i != buffer->in_offs || !is_wrapped; i = (i + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) {
         if (char_offset < bytes_searched + buffer->entry[i].size) {
             *entry_offset_byte_rtn = char_offset - bytes_searched;
             return &buffer->entry[i];

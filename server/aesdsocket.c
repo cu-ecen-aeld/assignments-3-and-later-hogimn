@@ -15,7 +15,12 @@
 
 #define PORT 9000
 #define BUFFER_SIZE 1024
+#define USE_AESD_CHAR_DEVICE 1
+#if USE_AESD_CHAR_DEVICE
+#define FILE_PATH "/dev/aesdchar"
+#else
 #define FILE_PATH "/var/tmp/aesdsocketdata"
+#endif
 
 static int server_socket;
 
@@ -60,8 +65,10 @@ void handle_signal(int signal) {
         // Close server socket
         close(server_socket);
 
+#if !USE_AESD_CHAR_DEVICE
         // Remove the file
         remove(FILE_PATH);
+#endif
 
         exit(EXIT_SUCCESS);
     }
@@ -206,6 +213,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Create the timer thread
+#if !USE_AESD_CHAR_DEVICE
     pthread_t timer_thread;
     if (pthread_create(&timer_thread, NULL, timer_handler, NULL)) {
         syslog(LOG_ERR, "Could not create thread");
@@ -216,6 +224,7 @@ int main(int argc, char *argv[]) {
     node_t *node = (node_t *)malloc(sizeof(node));
     node->thread_id = timer_thread;
     SLIST_INSERT_HEAD(&head, node, entries);
+#endif
 
     while (1) {
         // Wait for and accept a connection
