@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <pthread.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
 #include "queue.h"
 
 #define PORT 9000
@@ -100,11 +101,20 @@ void *connection_handler(void *arg) {
     char buffer[BUFFER_SIZE];
     int bytes_read;
     while ((bytes_read = recv(client_socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
-
-        // Null-terminate the buffer
-        buffer[bytes_read] = '\0';
-        write(fd, buffer, bytes_read);
-        syslog(LOG_INFO, "write: %s\n", buffer);
+        struct aesd_seekto seekto;
+        // Ioctl
+        if (strncmp(buffer, "AESDCHAR_IOCSEEKTO:", 19) == 0) {
+            // Parse write_cmd and write_cmd_offset from buffer
+            sscanf(buffer, "AESDCHAR_IOCSEEKTO:%d,%d", &seekto.write_cmd, &seekto.write_cmd_offset);
+            ioctl(fd, AESDCHAR_IOCSEEKTO, &seekto);
+            syslog(LOG_INFO, "ioctl: write_cmd=%d write_cmd_offset=%d\n", seekto.write_cmd, seekto.write_cmd_offset);
+        // write
+        } else {
+            // Null-terminate the buffer
+            buffer[bytes_read] = '\0';
+            write(fd, buffer, bytes_read);
+            syslog(LOG_INFO, "write: %s\n", buffer);
+        }
 
         // End of packet
         if (buffer[bytes_read - 1] == '\n') {
@@ -115,8 +125,12 @@ void *connection_handler(void *arg) {
     // Release the mutex to allow another thread to write
     pthread_mutex_unlock(&mutex);
 
+#if !USE_AESD_CHAR_DEVICE
     // Send the contents of the file back to the client
     lseek(fd, 0, SEEK_SET);
+#endif
+
+
     while ((bytes_read = read(fd, buffer, BUFFER_SIZE)) > 0) {
         send(client_socket, buffer, bytes_read, 0);
     }
