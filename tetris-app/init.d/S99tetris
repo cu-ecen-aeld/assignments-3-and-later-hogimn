@@ -1,0 +1,38 @@
+#! /bin/sh
+
+# This is a shell script that load and unload device drivers
+
+case "$1" in
+    # If the script is called with the "start" argument, load the drivers
+    start)
+        # Print a message indicating that the drivers are loading
+        echo "load drivers"
+
+        # Execute the driver load scripts
+        modprobe i2c-dev
+        modprobe i2c-bcm2835
+        modprobe rpikey
+        tetris
+        ;;
+
+    # If the script is called with the "stop" argument, stop the daemon.
+    stop)
+        # Print a message indicating that the drivers are unloading
+        echo "Unload drivers"
+
+        # Execute the driver unload scripts
+        rmmod rpikey
+        rmmod i2c-bcm2835
+        rmmod i2c-dev
+        ;;
+    # If the script is called with any other argument, print usage information.
+    *)
+        # Print a message explaining the correct usage of the script.
+        echo "Usage:  $0 {start|stop}"
+
+    # Exit the script with an error code of 1 to indicate that it was used incorrectly.
+    exit 1
+esac
+
+# Exit the script with a success code of 0.
+exit 0
